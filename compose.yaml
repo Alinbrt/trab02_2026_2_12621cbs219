@@ -1,0 +1,11 @@
+services:
+  app:
+    container_name: trab02_2026_2_12621cbs219
+    image: trab02_2026_2_12621cbs219
+    build: .
+    restart: unless-stopped
+    volumes:
+      - ./dados:/app/dados
+    environment:
+      - INVENTARIO_DADOS=/app/dados
+    command: python main.py servidor
