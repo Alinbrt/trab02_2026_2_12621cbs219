@@ -56,7 +56,7 @@ class Vulnerabilidade:
         cvss: float | None = None,
     ):
         self.cve = _texto_obrigatorio(cve, "identificador (CVE)").upper()
-        self.descricao = _texto_obrigatorio(descricao, "descrição")
+        self.descricao = _texto_obrigatorio(descricao, "descrição", maximo=2000)
         self.categoria = _texto_obrigatorio(categoria, "categoria")
         if not isinstance(severidade, Severidade):
             raise ValueError("Severidade inválida.")
@@ -108,9 +108,11 @@ class Vulnerabilidade:
 
     def __str__(self) -> str:
         return (
-            f"[{self.cve}] {self.descricao} | Categoria: {self.categoria} | "
-            f"Severidade: {self.severidade.value} (CVSS {self.cvss:.1f}) | "
-            f"Status: {self.status.value}"
+            f"[{self.cve}]\n"
+            f"    Descrição:  {self.descricao}\n"
+            f"    Categoria:  {self.categoria}\n"
+            f"    Severidade: {self.severidade.value} (CVSS {self.cvss:.1f})\n"
+            f"    Status:     {self.status.value}"
         )
 
 
