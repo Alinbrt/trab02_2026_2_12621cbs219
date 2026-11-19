@@ -12,7 +12,13 @@ from enums import Severidade, StatusTratamento, TipoAtivo
 from inventario import ErroInventario, Inventario
 from modelos import Equipamento, Vulnerabilidade, criar_equipamento, validar_responsavel
 from persistencia import ErroPersistencia
-from catalogo import ErroCatalogo, buscar_no_nvd
+from catalogo import (
+    ErroCatalogo,
+    TIPOS_COMUNS_BUSCA,
+    VulnerabilidadeConhecida,
+    buscar_no_nvd,
+    buscar_por_palavra_chave,
+)
 
 
 class Cancelado(Exception):
@@ -286,19 +292,80 @@ class AplicacaoCLI:
         print("[+] Vulnerabilidade registrada com sucesso!")
 
     def cadastrar_vulnerabilidade_do_catalogo(self) -> None:
-        """Busca a vulnerabilidade no catálogo NVD (NIST) e cadastra no ativo."""
+        """Fluxo de cadastro via NVD: por CVE direto ou por palavra-chave."""
         ativo = self.inventario.buscar_por_id(Entrada.inteiro("ID do Ativo"))
-        cve_id = Entrada.texto("Identificador CVE (ex.: CVE-2021-44228)")
 
-        print(f"Buscando {cve_id} no NVD...")
-        try:
-            vk = buscar_no_nvd(cve_id)
-        except ErroCatalogo as erro:
-            print(f"[!] {erro}")
+        print("\nComo você quer buscar a vulnerabilidade?")
+        print("  1 - Tenho o código CVE")
+        print("  2 - Buscar por tipo de vulnerabilidade")
+        modo = input("Escolha (1 ou 2): ").strip()
+
+        if modo == "1":
+            vk = self._buscar_cve_direto()
+        elif modo == "2":
+            vk = self._buscar_cve_por_tipo()
+        else:
+            print("[!] Opção inválida.")
             return
 
+        if vk is None:
+            return
+
+        self._confirmar_e_cadastrar_do_catalogo(ativo, vk)
+
+    def _buscar_cve_direto(self) -> VulnerabilidadeConhecida | None:
+        """Busca única pelo código CVE informado."""
+        cve_id = Entrada.texto("Identificador CVE (ex.: CVE-2021-44228)")
+        print(f"Buscando {cve_id} no NVD...")
+        try:
+            return buscar_no_nvd(cve_id)
+        except ErroCatalogo as erro:
+            print(f"[!] {erro}")
+            return None
+
+    def _buscar_cve_por_tipo(self) -> VulnerabilidadeConhecida | None:
+        """Mostra tipos comuns em PT-BR, busca no NVD e deixa o usuário escolher."""
+        print("\nTipos comuns de vulnerabilidade:")
+        for chave, (nome_pt, _) in TIPOS_COMUNS_BUSCA.items():
+            print(f"  {chave} - {nome_pt}")
+        print("  0 - Digitar outro termo (em inglês)")
+
+        escolha = input("Escolha: ").strip()
+
+        if escolha == "0":
+            termo = Entrada.texto("Termo de busca (em inglês)")
+        elif escolha in TIPOS_COMUNS_BUSCA:
+            _, termo = TIPOS_COMUNS_BUSCA[escolha]
+        else:
+            print("[!] Opção inválida.")
+            return None
+
+        print(f"\nBuscando '{termo}' no NVD...")
+        try:
+            resultados = buscar_por_palavra_chave(termo, limite=5)
+        except ErroCatalogo as erro:
+            print(f"[!] {erro}")
+            return None
+
+        print(f"\nEncontrados {len(resultados)} resultado(s):")
+        for i, vk in enumerate(resultados, start=1):
+            trecho = vk.descricao[:300] + ("..." if len(vk.descricao) > 300 else "")
+            print(f"\n  {i}. [{vk.cve}] {vk.severidade.value} (CVSS {vk.cvss})")
+            print(f"     Categoria: {vk.categoria}")
+            print(f"     {trecho}")
+
+        numero = Entrada.inteiro("\nEscolha o número (0 para cancelar)", minimo=0)
+        if numero == 0 or numero > len(resultados):
+            print("[!] Seleção cancelada ou inválida.")
+            return None
+        return resultados[numero - 1]
+
+    def _confirmar_e_cadastrar_do_catalogo(
+        self, ativo: Equipamento, vk: VulnerabilidadeConhecida
+    ) -> None:
+        """Mostra os dados da vulnerabilidade selecionada e confirma o cadastro."""
         print()
-        print("Vulnerabilidade encontrada no NVD:")
+        print("Vulnerabilidade selecionada:")
         print(f"  CVE:        {vk.cve}")
         print(f"  Descrição:  {vk.descricao[:200]}"
               + ("..." if len(vk.descricao) > 200 else ""))
@@ -349,7 +416,7 @@ class AplicacaoCLI:
     def menu_vulnerabilidades(self) -> None:
         self._submenu("Vulnerabilidades", {
             "1": ("Cadastrar vulnerabilidade (manual)", self.cadastrar_vulnerabilidade),
-            "2": ("Cadastrar via NVD (busca online no NIST)", self.cadastrar_vulnerabilidade_do_catalogo),
+            "2": ("Cadastrar via NVD (por CVE ou tipo)", self.cadastrar_vulnerabilidade_do_catalogo),
             "3": ("Listar vulnerabilidades de um ativo", self.listar_vulnerabilidades),
             "4": ("Atualizar status de tratamento", self.atualizar_status),
             "5": ("Remover vulnerabilidade", self.remover_vulnerabilidade),
