@@ -12,6 +12,7 @@ from enums import Severidade, StatusTratamento, TipoAtivo
 from inventario import ErroInventario, Inventario
 from modelos import Equipamento, Vulnerabilidade, criar_equipamento, validar_responsavel
 from persistencia import ErroPersistencia
+from catalogo import ErroCatalogo, buscar_no_nvd
 
 
 class Cancelado(Exception):
@@ -284,6 +285,42 @@ class AplicacaoCLI:
         self.inventario.adicionar_vulnerabilidade(ativo.id_ativo, self._ler_vulnerabilidade(ativo))
         print("[+] Vulnerabilidade registrada com sucesso!")
 
+    def cadastrar_vulnerabilidade_do_catalogo(self) -> None:
+        """Busca a vulnerabilidade no catálogo NVD (NIST) e cadastra no ativo."""
+        ativo = self.inventario.buscar_por_id(Entrada.inteiro("ID do Ativo"))
+        cve_id = Entrada.texto("Identificador CVE (ex.: CVE-2021-44228)")
+
+        print(f"Buscando {cve_id} no NVD...")
+        try:
+            vk = buscar_no_nvd(cve_id)
+        except ErroCatalogo as erro:
+            print(f"[!] {erro}")
+            return
+
+        print()
+        print("Vulnerabilidade encontrada no NVD:")
+        print(f"  CVE:        {vk.cve}")
+        print(f"  Descrição:  {vk.descricao[:200]}"
+              + ("..." if len(vk.descricao) > 200 else ""))
+        print(f"  Categoria:  {vk.categoria}")
+        print(f"  Severidade: {vk.severidade.value}")
+        print(f"  CVSS:       {vk.cvss}")
+        print()
+
+        if not Entrada.confirmar("Confirma o cadastro desta vulnerabilidade?"):
+            print("[!] Cadastro cancelado.")
+            return
+
+        vulnerabilidade = Vulnerabilidade(
+            cve=vk.cve,
+            descricao=vk.descricao,
+            categoria=vk.categoria,
+            severidade=vk.severidade,
+            cvss=vk.cvss,
+        )
+        self.inventario.adicionar_vulnerabilidade(ativo.id_ativo, vulnerabilidade)
+        print(f"[+] Vulnerabilidade {vk.cve} cadastrada no ativo {ativo.hostname}!")
+
     def listar_vulnerabilidades(self) -> None:
         ativo = self.inventario.buscar_por_id(Entrada.inteiro("ID do Ativo para consulta"))
         self._exibir_vulnerabilidades(ativo)
@@ -296,7 +333,8 @@ class AplicacaoCLI:
             print("Ativo sem vulnerabilidades registradas.")
             return
         for vuln in vulnerabilidades:
-            print(f"  - {vuln}")
+            print()
+            print(vuln)
 
     def menu_ativos(self) -> None:
         self._submenu("Ativos", {
@@ -310,10 +348,11 @@ class AplicacaoCLI:
 
     def menu_vulnerabilidades(self) -> None:
         self._submenu("Vulnerabilidades", {
-            "1": ("Cadastrar vulnerabilidade", self.cadastrar_vulnerabilidade),
-            "2": ("Listar vulnerabilidades de um ativo", self.listar_vulnerabilidades),
-            "3": ("Atualizar status de tratamento", self.atualizar_status),
-            "4": ("Remover vulnerabilidade", self.remover_vulnerabilidade),
+            "1": ("Cadastrar vulnerabilidade (manual)", self.cadastrar_vulnerabilidade),
+            "2": ("Cadastrar via NVD (busca online no NIST)", self.cadastrar_vulnerabilidade_do_catalogo),
+            "3": ("Listar vulnerabilidades de um ativo", self.listar_vulnerabilidades),
+            "4": ("Atualizar status de tratamento", self.atualizar_status),
+            "5": ("Remover vulnerabilidade", self.remover_vulnerabilidade),
         })
 
 
