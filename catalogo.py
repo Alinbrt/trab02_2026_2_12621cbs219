@@ -7,6 +7,10 @@ import requests
 
 from enums import Severidade
 
+from deep_translator import MyMemoryTranslator
+
+from concurrent.futures import ThreadPoolExecutor
+
 
 URL_NVD = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 TIMEOUT_SEGUNDOS = 10
@@ -41,6 +45,9 @@ TRADUCAO_CWE = {
     "CWE-119": "Erro de Limites de Buffer",
     "CWE-269": "Gerenciamento de Privilégios Inadequado",
     "CWE-384": "Fixação de Sessão",
+    "CWE-264": "Problemas de Permissões e Controle de Acesso",
+    "NVD-CWE-Other": "Não classificada no CWE",
+    "NVD-CWE-noinfo": "Sem informação de CWE",
 }
 
 
@@ -125,3 +132,97 @@ def _extrair_categoria(cve: dict) -> str:
                 # Traduz se tiver no mapa; senão, devolve o código original
                 return TRADUCAO_CWE.get(cwe, cwe)
     return "Não classificada"
+
+# Tipos comuns pra busca em PT-BR
+TIPOS_COMUNS_BUSCA = {
+    "1": ("Injeção de SQL", "SQL injection"),
+    "2": ("Cross-Site Scripting (XSS)", "cross-site scripting"),
+    "3": ("Credenciais fracas", "weak credentials"),
+    "4": ("Autenticação ausente", "missing authentication"),
+    "5": ("Travessia de caminho (Path Traversal)", "path traversal"),
+    "6": ("Injeção de comando", "command injection"),
+    "7": ("Falsificação de requisição (CSRF)", "cross-site request forgery"),
+    "8": ("Exposição de informações sensíveis", "information exposure"),
+}
+
+
+def buscar_por_palavra_chave(termo: str, limite: int = 5) -> list[VulnerabilidadeConhecida]:
+    """Busca vulnerabilidades no NVD por palavra-chave. Retorna até 'limite' resultados válidos."""
+    termo = termo.strip()
+    if not termo:
+        raise ErroCatalogo("Termo de busca não pode ser vazio.")
+
+    try:
+        resposta = requests.get(
+            URL_NVD,
+            params={
+                "keywordSearch": termo,
+                "keywordExactMatch": "",  # exige a frase exata, não só qualquer palavra
+                "resultsPerPage": limite,
+            },
+            timeout=TIMEOUT_SEGUNDOS,
+        )
+
+        resposta.raise_for_status()
+    except requests.exceptions.RequestException as erro:
+        raise ErroCatalogo(f"Não foi possível consultar o NVD: {erro}") from erro
+
+    dados = resposta.json()
+    lista = dados.get("vulnerabilities", [])
+    if not lista:
+        raise ErroCatalogo(f"Nenhuma vulnerabilidade encontrada para '{termo}'.")
+
+    resultados = []
+    for item in lista:
+        cve = item["cve"]
+        try:
+            cvss, severidade = _extrair_metricas(cve)
+            resultados.append(VulnerabilidadeConhecida(
+                cve=cve["id"],
+                descricao=_extrair_descricao(cve),
+                categoria=_extrair_categoria(cve),
+                severidade=severidade,
+                cvss=cvss,
+            ))
+        except ErroCatalogo:
+            continue  # pula entradas sem métricas CVSS
+
+    if not resultados:
+        raise ErroCatalogo(f"Nenhuma vulnerabilidade válida encontrada para '{termo}'.")
+
+    # Traduz todas as descrições em paralelo (rápido)
+    descricoes_pt = _traduzir_em_paralelo([r.descricao for r in resultados])
+    for r, descricao_pt in zip(resultados, descricoes_pt):
+        r.descricao = descricao_pt
+
+    return resultados
+
+
+def _traduzir_para_portugues(texto: str) -> str:
+    """Traduz texto do inglês pro português usando MyMemory Translator.
+    Divide textos longos em pedaços porque o MyMemory limita 500 caracteres por chamada.
+    Se falhar, devolve o original."""
+    try:
+        tradutor = MyMemoryTranslator(source="english", target="portuguese brazil")
+        if len(texto) <= 500:
+            return tradutor.translate(texto)
+        # Divide em pedaços de ~450 chars, cortando em espaços pra não partir palavras
+        pedacos = []
+        restante = texto
+        while len(restante) > 450:
+            corte = restante.rfind(" ", 0, 450)
+            if corte == -1:
+                corte = 450
+            pedacos.append(restante[:corte])
+            restante = restante[corte:].lstrip()
+        if restante:
+            pedacos.append(restante)
+        return " ".join(tradutor.translate(p) for p in pedacos)
+    except Exception:
+        return texto
+    
+    
+def _traduzir_em_paralelo(textos: list[str]) -> list[str]:
+    """Traduz vários textos ao mesmo tempo. ~2s pra 5 textos em vez de ~10s."""
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        return list(executor.map(_traduzir_para_portugues, textos))
