@@ -72,7 +72,7 @@ class TelaBoasVindas(ctk.CTkFrame):
                 font=FONTE_PEQUENA,
                 fg_color="transparent",
                 text_color=COR_TEXTO_SUAVE,
-                hover_color="#2a2a3e",
+                hover_color="#e9e2f5",
                 command=self.ao_pular_tutorial,
             ).pack(pady=5)
 

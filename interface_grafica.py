@@ -7,6 +7,7 @@ import customtkinter as ctk
 
 from interface.tela_login import TelaLogin
 from interface.tela_boas_vindas import TelaBoasVindas
+from interface.tela_dashboard import TelaDashboard
 from interface.tema import NOME_APP, COR_FUNDO
 
 
@@ -16,11 +17,11 @@ class InventarioCycatApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title(NOME_APP)
-        self.geometry("900x650")
-        self.minsize(700, 500)
+        self.geometry("1100x700")
+        self.minsize(900, 600)
         self.configure(fg_color=COR_FUNDO)
 
-        ctk.set_appearance_mode("dark")
+        ctk.set_appearance_mode("light")
 
         self.perfil_logado = None
         self.tela_atual = None
@@ -47,27 +48,15 @@ class InventarioCycatApp(ctk.CTk):
         self._trocar_tela(TelaBoasVindas(
             self,
             perfil=self.perfil_logado,
-            ao_iniciar_tutorial=self._iniciar_tutorial,
+            # Por enquanto os dois botões vão pro dashboard;
+            # o guided tour vai ser plugado dentro do dashboard depois.
+            ao_iniciar_tutorial=self._ir_para_dashboard,
             ao_pular_tutorial=self._ir_para_dashboard,
         ))
 
-    def _iniciar_tutorial(self):
-        print("[FLUXO] tutorial solicitado")
-        self._placeholder("🎓 TODO: Tela de Tutorial (próximo passo)")
-
     def _ir_para_dashboard(self):
         print(f"[FLUXO] dashboard para {self.perfil_logado}")
-        self._placeholder(
-            f"🏠 TODO: Dashboard ({self.perfil_logado.capitalize()})"
-        )
-
-    # -------- Placeholder temporário --------
-    def _placeholder(self, texto):
-        frame = ctk.CTkFrame(self, fg_color=COR_FUNDO)
-        ctk.CTkLabel(
-            frame, text=texto, font=("Segoe UI", 24, "bold"),
-        ).place(relx=0.5, rely=0.5, anchor="center")
-        self._trocar_tela(frame)
+        self._trocar_tela(TelaDashboard(self, perfil=self.perfil_logado))
 
 
 if __name__ == "__main__":
