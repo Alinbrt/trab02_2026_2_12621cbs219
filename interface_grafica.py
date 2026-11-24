@@ -1,9 +1,11 @@
 """
-Inventário Cycat - Interface Gráfica
+Inventario Cycat - Interface Grafica
 Entry point. Rode com: python interface_grafica.py
 """
 
 import customtkinter as ctk
+
+from inventario import Inventario
 
 from interface.tela_login import TelaLogin
 from interface.tela_boas_vindas import TelaBoasVindas
@@ -22,20 +24,22 @@ class InventarioCycatApp(ctk.CTk):
         self.configure(fg_color=COR_FUNDO)
 
         ctk.set_appearance_mode("light")
+        self.after(100, lambda: self.state("zoomed"))
+
+        # Backend compartilhado pelas telas
+        self.inventario = Inventario()
 
         self.perfil_logado = None
         self.tela_atual = None
 
         self._mostrar_login()
 
-    # -------- Troca de telas --------
     def _trocar_tela(self, nova_tela):
         if self.tela_atual is not None:
             self.tela_atual.destroy()
         self.tela_atual = nova_tela
         self.tela_atual.pack(fill="both", expand=True)
 
-    # -------- Fluxo --------
     def _mostrar_login(self):
         self._trocar_tela(TelaLogin(self, ao_fazer_login=self._apos_login))
 
@@ -48,15 +52,23 @@ class InventarioCycatApp(ctk.CTk):
         self._trocar_tela(TelaBoasVindas(
             self,
             perfil=self.perfil_logado,
-            # Por enquanto os dois botões vão pro dashboard;
-            # o guided tour vai ser plugado dentro do dashboard depois.
             ao_iniciar_tutorial=self._ir_para_dashboard,
             ao_pular_tutorial=self._ir_para_dashboard,
         ))
 
     def _ir_para_dashboard(self):
         print(f"[FLUXO] dashboard para {self.perfil_logado}")
-        self._trocar_tela(TelaDashboard(self, perfil=self.perfil_logado))
+        self._trocar_tela(TelaDashboard(
+            self,
+            perfil=self.perfil_logado,
+            inventario=self.inventario,
+            ao_sair=self._fazer_logout,
+        ))
+
+    def _fazer_logout(self):
+        print("[FLUXO] logout -> volta pro login")
+        self.perfil_logado = None
+        self._mostrar_login()
 
 
 if __name__ == "__main__":
