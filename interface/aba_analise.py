@@ -1,4 +1,4 @@
-"""Aba Analise de Risco - roda o modelo linear, mostra barras de comparacao e gerencia dependencias."""
+"""Aba Análise de Risco - roda o modelo linear, mostra barras de comparação e gerencia dependências."""
 
 import customtkinter as ctk
 from tkinter import messagebox
@@ -7,7 +7,7 @@ from analise_risco import ModeloAnaliseRisco
 from inventario import Inventario, ErroInventario
 
 from interface.tema import (
-    COR_FUNDO, COR_FUNDO_CLARO, COR_FUNDO_MEDIO,
+    COR_FUNDO, COR_FUNDO_CLARO, COR_FUNDO_MEDIO, COR_FUNDO_ESCURO,
     COR_PRIMARIA, COR_PRIMARIA_HOVER, COR_CRITICA,
     COR_TEXTO, COR_TEXTO_SUAVE,
     COR_BAIXA, COR_MEDIA, COR_ALTA,
@@ -17,7 +17,7 @@ from interface.tema import (
 
 
 def cor_do_risco(valor):
-    """Cor pastel baseada na intensidade do risco."""
+    """Cor baseada na intensidade do risco."""
     if valor < 2:
         return COR_BAIXA
     if valor < 5:
@@ -28,38 +28,49 @@ def cor_do_risco(valor):
 
 
 class AbaAnalise(ctk.CTkFrame):
-    """Analise de risco + gestao de dependencias."""
+    """Análise de risco + gestão de dependências."""
 
-    def __init__(self, master, inventario: Inventario, perfil: str, ao_mudar_cycat=None):
+    def __init__(self, master, inventario: Inventario, perfil: str, cycat=None):
         super().__init__(master, fg_color=COR_FUNDO)
         self.inventario = inventario
         self.perfil = perfil
         self.eh_admin = (perfil == "admin")
-        self.ao_mudar_cycat = ao_mudar_cycat or (lambda nome: None)
+        self.cycat = cycat
         self._construir()
+
+    def _notificar_cycat(self, expressao, titulo="", mensagem=""):
+        if self.cycat:
+            self.cycat.mostrar(expressao, titulo, mensagem)
 
     def _construir(self):
         topo = ctk.CTkFrame(self, fg_color="transparent")
         topo.pack(fill="x", pady=(0, 10))
 
         ctk.CTkLabel(
-            topo, text="📊  Analise de Risco",
+            topo, text="📊  Análise de Risco",
             font=FONTE_TITULO, text_color=COR_PRIMARIA,
         ).pack(side="left")
 
         ctk.CTkButton(
-            topo, text="▶  Rodar Analise",
-            width=160, height=36,
-            font=FONTE_BOTAO,
+            topo, text="▶  Rodar Análise",
+            width=170, height=38, font=FONTE_BOTAO,
             fg_color=COR_PRIMARIA, hover_color=COR_PRIMARIA_HOVER,
             text_color="white",
             command=self._rodar_analise,
         ).pack(side="right")
 
-        self.area_resultado = ctk.CTkScrollableFrame(
-            self, fg_color=COR_FUNDO_CLARO, corner_radius=10, height=320,
+        # Área de resultados (card com borda)
+        card_resultado = ctk.CTkFrame(
+            self, fg_color=COR_FUNDO_CLARO, corner_radius=12,
+            border_width=2, border_color=COR_FUNDO_MEDIO, height=360,
         )
-        self.area_resultado.pack(fill="x", pady=(0, 15))
+        card_resultado.pack(fill="x", pady=(0, 15))
+        card_resultado.pack_propagate(False)
+
+        self.area_resultado = ctk.CTkScrollableFrame(
+            card_resultado, fg_color="transparent",
+        )
+        self.area_resultado.pack(fill="both", expand=True, padx=10, pady=10)
         self._placeholder_resultado()
 
         self._construir_dependencias()
@@ -67,7 +78,7 @@ class AbaAnalise(ctk.CTkFrame):
     def _placeholder_resultado(self):
         ctk.CTkLabel(
             self.area_resultado,
-            text="Clique em '▶ Rodar Analise' pra calcular o risco de cada ativo.",
+            text="Clique em '▶ Rodar Análise' para calcular o risco de cada ativo.",
             font=FONTE_TEXTO, text_color=COR_TEXTO_SUAVE,
         ).pack(pady=40)
 
@@ -78,47 +89,42 @@ class AbaAnalise(ctk.CTkFrame):
         if not self.inventario.ativos:
             ctk.CTkLabel(
                 self.area_resultado,
-                text="Nenhum ativo cadastrado. Nao ha o que analisar.",
+                text="Nenhum ativo cadastrado. Não há o que analisar.",
                 font=FONTE_TEXTO, text_color=COR_TEXTO_SUAVE,
             ).pack(pady=40)
-            self.ao_mudar_cycat("cycat_vazio")
+            self._notificar_cycat("cycat_vazio", "Inventário vazio", "Cadastre ativos antes de rodar a análise.")
             return
 
-        self.ao_mudar_cycat("cycat_processando")
+        self._notificar_cycat("cycat_processando", "Processando...", "Calculando as matrizes M, v, W, A e resolvendo (I − A)·x = b.")
         self.update()
 
         modelo = ModeloAnaliseRisco(self.inventario.ativos, self.inventario.dependencias)
         resultados, diagnostico = modelo.calcular()
 
-        # Diagnostico
         cor_diag = COR_BAIXA if diagnostico.invertivel else COR_CRITICA
         ctk.CTkLabel(
             self.area_resultado,
             text=f"{'✅' if diagnostico.invertivel else '⚠️'}  {diagnostico.mensagem}",
             font=FONTE_SUBTITULO, text_color=cor_diag,
-            wraplength=800, justify="left",
+            wraplength=900, justify="left",
         ).pack(anchor="w", padx=15, pady=(10, 5))
 
         info = (
-            f"Diagonal dominante: {'sim' if diagnostico.diagonal_dominante else 'nao'}  •  "
+            f"Diagonal dominante: {'sim' if diagnostico.diagonal_dominante else 'não'}  •  "
             f"Determinante: {diagnostico.determinante:.3f}  •  "
-            f"Numero de condicao: {diagnostico.numero_condicao:.2e}"
+            f"Número de condição: {diagnostico.numero_condicao:.2e}"
         )
         ctk.CTkLabel(
             self.area_resultado, text=info,
             font=FONTE_PEQUENA, text_color=COR_TEXTO_SUAVE,
         ).pack(anchor="w", padx=15, pady=(0, 10))
 
-        # Cabecalho da tabela
         cab = ctk.CTkFrame(self.area_resultado, fg_color="transparent")
         cab.pack(fill="x", padx=15, pady=(5, 3))
         colunas_cab = [
-            ("ID", 50),
-            ("Hostname", 160),
-            ("Tipo", 130),
-            ("Risco Proprio (b)", 130),
-            ("Risco Efetivo (x)", 130),
-            ("Comparacao", 220),
+            ("ID", 50), ("Hostname", 180), ("Tipo", 140),
+            ("Risco Próprio (b)", 140), ("Risco Efetivo (x)", 140),
+            ("Comparação", 260),
         ]
         for texto, largura in colunas_cab:
             ctk.CTkLabel(
@@ -128,17 +134,15 @@ class AbaAnalise(ctk.CTkFrame):
                 width=largura, anchor="w",
             ).pack(side="left")
 
-        sep = ctk.CTkFrame(self.area_resultado, height=1, fg_color=COR_FUNDO_MEDIO)
+        sep = ctk.CTkFrame(self.area_resultado, height=1, fg_color=COR_FUNDO_ESCURO)
         sep.pack(fill="x", padx=15)
 
-        # Calcula o risco maximo pra escala relativa das barras
         riscos_usaveis = [
             (r.risco_efetivo if r.risco_efetivo is not None else r.risco_proprio)
             for r in resultados
         ]
         risco_maximo = max(riscos_usaveis) if riscos_usaveis else 0
 
-        # Ordena por risco efetivo (maior primeiro)
         ordenado = sorted(
             resultados,
             key=lambda r: (r.risco_efetivo if r.risco_efetivo is not None else r.risco_proprio),
@@ -148,13 +152,15 @@ class AbaAnalise(ctk.CTkFrame):
         for r in ordenado:
             self._linha_resultado(r, risco_maximo)
 
-        # Cycat por risco maximo
         if risco_maximo >= 10:
-            self.ao_mudar_cycat("cycat_vuln_critica")
-        elif risco_maximo >= 2:
-            self.ao_mudar_cycat("cycat_vuln_media")
+            self._notificar_cycat("cycat_vuln_critica", "Risco elevado!",
+                                  f"Risco efetivo máximo de {risco_maximo:.1f}. Priorize o tratamento.")
+        elif risco_maximo >= 5:
+            self._notificar_cycat("cycat_vuln_media", "Risco moderado",
+                                  f"Risco efetivo máximo de {risco_maximo:.1f}.")
         else:
-            self.ao_mudar_cycat("cycat_sucesso")
+            self._notificar_cycat("cycat_sucesso", "Risco sob controle",
+                                  "Nenhum ativo com risco elevado.")
 
     def _linha_resultado(self, r, risco_maximo):
         linha = ctk.CTkFrame(self.area_resultado, fg_color="transparent")
@@ -168,30 +174,28 @@ class AbaAnalise(ctk.CTkFrame):
             ).pack(side="left")
 
         label(str(r.equipamento.id_ativo), 50)
-        label(r.equipamento.hostname, 160)
-        label(r.equipamento.tipo.rotulo, 130)
-        label(f"{r.risco_proprio:.3f}", 130,
+        label(r.equipamento.hostname, 180)
+        label(r.equipamento.tipo.rotulo, 140)
+        label(f"{r.risco_proprio:.3f}", 140,
               cor=cor_do_risco(r.risco_proprio), negrito=True)
 
         if r.risco_efetivo is not None:
-            label(f"{r.risco_efetivo:.3f}", 130,
+            label(f"{r.risco_efetivo:.3f}", 140,
                   cor=cor_do_risco(r.risco_efetivo), negrito=True)
         else:
-            label("—", 130, cor=COR_TEXTO_SUAVE)
+            label("—", 140, cor=COR_TEXTO_SUAVE)
 
-        # Barra de comparacao + porcentagem
         risco_usavel = r.risco_efetivo if r.risco_efetivo is not None else r.risco_proprio
         fracao = (risco_usavel / risco_maximo) if risco_maximo > 0 else 0.0
         pct = fracao * 100
         cor_bar = cor_do_risco(risco_usavel)
 
-        barra_wrap = ctk.CTkFrame(linha, fg_color="transparent", width=220)
+        barra_wrap = ctk.CTkFrame(linha, fg_color="transparent", width=260)
         barra_wrap.pack(side="left")
 
         bar = ctk.CTkProgressBar(
-            barra_wrap, width=150, height=12,
-            progress_color=cor_bar,
-            fg_color=COR_FUNDO_MEDIO,
+            barra_wrap, width=180, height=12,
+            progress_color=cor_bar, fg_color=COR_FUNDO_MEDIO,
         )
         bar.set(fracao)
         bar.pack(side="left", padx=(0, 8), pady=4)
@@ -199,8 +203,7 @@ class AbaAnalise(ctk.CTkFrame):
         ctk.CTkLabel(
             barra_wrap, text=f"{pct:.0f}%",
             font=(FONTE_PEQUENA[0], 11, "bold"),
-            text_color=cor_bar,
-            width=50, anchor="w",
+            text_color=cor_bar, width=60, anchor="w",
         ).pack(side="left")
 
     def _construir_dependencias(self):
@@ -208,27 +211,33 @@ class AbaAnalise(ctk.CTkFrame):
         titulo_dep.pack(fill="x", pady=(0, 8))
 
         ctk.CTkLabel(
-            titulo_dep, text="🔗  Dependencias entre ativos",
+            titulo_dep, text="🔗  Dependências entre ativos",
             font=FONTE_SUBTITULO, text_color=COR_PRIMARIA,
         ).pack(side="left")
 
         if self.eh_admin:
             ctk.CTkButton(
                 titulo_dep, text="+  Cadastrar",
-                width=130, height=32, font=FONTE_BOTAO,
+                width=140, height=34, font=FONTE_BOTAO,
                 fg_color=COR_PRIMARIA, hover_color=COR_PRIMARIA_HOVER,
                 text_color="white",
                 command=self._abrir_cadastro_dep,
             ).pack(side="right")
 
-        self.lista_dep = ctk.CTkScrollableFrame(
-            self, fg_color=COR_FUNDO_CLARO, corner_radius=10,
+        card_dep = ctk.CTkFrame(
+            self, fg_color=COR_FUNDO_CLARO, corner_radius=12,
+            border_width=2, border_color=COR_FUNDO_MEDIO,
         )
-        self.lista_dep.pack(fill="both", expand=True)
+        card_dep.pack(fill="both", expand=True)
+
+        self.lista_dep = ctk.CTkScrollableFrame(card_dep, fg_color="transparent")
+        self.lista_dep.pack(fill="both", expand=True, padx=10, pady=10)
 
         if not self.eh_admin:
             ctk.CTkLabel(
-                self, text="🔒  Como Analista, voce pode visualizar e rodar a analise. Modificar dependencias e restrito ao Admin.",
+                self,
+                text="🔒  Como Analista, você pode visualizar e rodar a análise. "
+                     "Modificar dependências é restrito ao Admin.",
                 font=FONTE_PEQUENA, text_color=COR_TEXTO_SUAVE,
                 wraplength=800, justify="left",
             ).pack(anchor="w", pady=(10, 0))
@@ -243,7 +252,7 @@ class AbaAnalise(ctk.CTkFrame):
         if not deps:
             ctk.CTkLabel(
                 self.lista_dep,
-                text="Nenhuma dependencia cadastrada.",
+                text="Nenhuma dependência cadastrada.",
                 font=FONTE_PEQUENA, text_color=COR_TEXTO_SUAVE,
             ).pack(pady=15)
             return
@@ -252,7 +261,7 @@ class AbaAnalise(ctk.CTkFrame):
 
         for dep in deps:
             linha = ctk.CTkFrame(self.lista_dep, fg_color="transparent")
-            linha.pack(fill="x", padx=15, pady=3)
+            linha.pack(fill="x", padx=10, pady=3)
 
             texto = (
                 f"{host.get(dep.id_destino, '?')} (#{dep.id_destino})  "
@@ -261,18 +270,16 @@ class AbaAnalise(ctk.CTkFrame):
             )
             ctk.CTkLabel(
                 linha, text=texto,
-                font=FONTE_TEXTO, text_color=COR_TEXTO,
-                anchor="w",
+                font=FONTE_TEXTO, text_color=COR_TEXTO, anchor="w",
             ).pack(side="left", fill="x", expand=True)
 
             if self.eh_admin:
                 ctk.CTkButton(
                     linha, text="Remover",
-                    width=90, height=28, font=FONTE_PEQUENA,
+                    width=100, height=30, font=FONTE_PEQUENA,
                     fg_color="transparent",
                     border_width=1, border_color=COR_CRITICA,
-                    text_color=COR_CRITICA,
-                    hover_color=COR_FUNDO,
+                    text_color=COR_CRITICA, hover_color=COR_FUNDO,
                     command=lambda d=dep: self._remover_dep(d),
                 ).pack(side="right")
 
@@ -280,38 +287,41 @@ class AbaAnalise(ctk.CTkFrame):
         if len(self.inventario.ativos) < 2:
             messagebox.showwarning(
                 "Poucos ativos",
-                "Cadastre pelo menos 2 ativos antes de criar uma dependencia.",
+                "Cadastre pelo menos 2 ativos antes de criar uma dependência.",
             )
             return
         FormularioDependencia(
             master=self, inventario=self.inventario,
-            ao_salvar=lambda: (self._renderizar_dependencias(),
-                               self.ao_mudar_cycat("cycat_sucesso")),
+            ao_salvar=lambda: (
+                self._renderizar_dependencias(),
+                self._notificar_cycat("cycat_sucesso", "Dependência registrada",
+                                      "Rode a análise novamente para ver o efeito no risco efetivo."),
+            ),
         )
 
     def _remover_dep(self, dep):
         if not messagebox.askyesno(
-            "Confirmar", f"Remover a dependencia #{dep.id_destino} ← #{dep.id_origem}?",
+            "Confirmar", f"Remover a dependência #{dep.id_destino} ← #{dep.id_origem}?",
         ):
             return
         try:
             self.inventario.remover_dependencia(dep.id_origem, dep.id_destino)
             self._renderizar_dependencias()
-            self.ao_mudar_cycat("cycat_sucesso")
+            self._notificar_cycat("cycat_sucesso", "Dependência removida", "")
         except ErroInventario as erro:
             messagebox.showerror("Erro", str(erro))
 
 
 class FormularioDependencia(ctk.CTkToplevel):
-    """Pop-up pra cadastrar dependencia."""
+    """Pop-up para cadastrar dependência."""
 
     def __init__(self, master, inventario, ao_salvar):
         super().__init__(master)
         self.inventario = inventario
         self.ao_salvar = ao_salvar
 
-        self.title("Cadastrar Dependencia")
-        self.geometry("480x440")
+        self.title("Cadastrar Dependência")
+        self.geometry("500x460")
         self.configure(fg_color=COR_FUNDO)
         self.transient(master)
         self.grab_set()
@@ -326,7 +336,7 @@ class FormularioDependencia(ctk.CTkToplevel):
         box.pack(fill="both", expand=True, padx=25, pady=20)
 
         ctk.CTkLabel(
-            box, text="Nova dependencia",
+            box, text="Nova dependência",
             font=FONTE_SUBTITULO, text_color=COR_PRIMARIA,
         ).pack(anchor="w", pady=(0, 15))
 
@@ -336,7 +346,7 @@ class FormularioDependencia(ctk.CTkToplevel):
         ctk.CTkLabel(box, text="Ativo de origem (quem causa risco)",
                      font=FONTE_PEQUENA, text_color=COR_TEXTO_SUAVE).pack(anchor="w")
         self.combo_origem = ctk.CTkComboBox(
-            box, values=opcoes, state="readonly", font=FONTE_TEXTO, width=420,
+            box, values=opcoes, state="readonly", font=FONTE_TEXTO, width=440,
         )
         self.combo_origem.set(opcoes[0])
         self.combo_origem.pack(pady=(2, 10), fill="x")
@@ -344,19 +354,19 @@ class FormularioDependencia(ctk.CTkToplevel):
         ctk.CTkLabel(box, text="Ativo de destino (quem herda o risco)",
                      font=FONTE_PEQUENA, text_color=COR_TEXTO_SUAVE).pack(anchor="w")
         self.combo_destino = ctk.CTkComboBox(
-            box, values=opcoes, state="readonly", font=FONTE_TEXTO, width=420,
+            box, values=opcoes, state="readonly", font=FONTE_TEXTO, width=440,
         )
         self.combo_destino.set(opcoes[1] if len(opcoes) > 1 else opcoes[0])
         self.combo_destino.pack(pady=(2, 10), fill="x")
 
-        ctk.CTkLabel(box, text="Fracao herdada (entre 0 e 1, exemplo: 0.5 = 50%)",
+        ctk.CTkLabel(box, text="Fração herdada (entre 0 e 1, exemplo: 0.5 = 50%)",
                      font=FONTE_PEQUENA, text_color=COR_TEXTO_SUAVE).pack(anchor="w")
-        self.entry_fracao = ctk.CTkEntry(box, font=FONTE_TEXTO, width=420, height=36)
+        self.entry_fracao = ctk.CTkEntry(box, font=FONTE_TEXTO, width=440, height=36)
         self.entry_fracao.pack(pady=(2, 10), fill="x")
 
         self.label_erro = ctk.CTkLabel(
             box, text="", text_color=COR_CRITICA, font=FONTE_PEQUENA,
-            wraplength=420, justify="left",
+            wraplength=440, justify="left",
         )
         self.label_erro.pack(anchor="w", pady=(5, 0))
 
@@ -369,19 +379,17 @@ class FormularioDependencia(ctk.CTkToplevel):
         botoes.pack(fill="x", pady=(15, 0))
         ctk.CTkButton(
             botoes, text="Cancelar",
-            width=120, height=36, font=FONTE_BOTAO,
+            width=120, height=38, font=FONTE_BOTAO,
             fg_color="transparent",
             border_width=1, border_color=COR_TEXTO_SUAVE,
-            text_color=COR_TEXTO,
-            hover_color=COR_FUNDO_MEDIO,
+            text_color=COR_TEXTO, hover_color=COR_FUNDO_MEDIO,
             command=self.destroy,
         ).pack(side="right", padx=(5, 0))
         ctk.CTkButton(
             botoes, text="Salvar",
-            width=120, height=36, font=FONTE_BOTAO,
+            width=120, height=38, font=FONTE_BOTAO,
             fg_color=COR_PRIMARIA, hover_color=COR_PRIMARIA_HOVER,
-            text_color="white",
-            command=self._salvar,
+            text_color="white", command=self._salvar,
         ).pack(side="right")
 
         self.entry_fracao.focus()

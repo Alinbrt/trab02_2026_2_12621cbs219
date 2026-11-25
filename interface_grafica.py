@@ -1,5 +1,5 @@
 """
-Inventario Cycat - Interface Grafica
+Inventário Cycat - Interface Gráfica
 Entry point. Rode com: python interface_grafica.py
 """
 
@@ -19,8 +19,8 @@ class InventarioCycatApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title(NOME_APP)
-        self.geometry("1100x700")
-        self.minsize(900, 600)
+        self.geometry("1280x800")
+        self.minsize(1100, 700)
         self.configure(fg_color=COR_FUNDO)
 
         ctk.set_appearance_mode("light")
@@ -52,21 +52,22 @@ class InventarioCycatApp(ctk.CTk):
         self._trocar_tela(TelaBoasVindas(
             self,
             perfil=self.perfil_logado,
-            ao_iniciar_tutorial=self._ir_para_dashboard,
-            ao_pular_tutorial=self._ir_para_dashboard,
+            ao_iniciar_tutorial=lambda: self._ir_para_dashboard(com_tutorial=True),
+            ao_pular_tutorial=lambda: self._ir_para_dashboard(com_tutorial=False),
         ))
 
-    def _ir_para_dashboard(self):
-        print(f"[FLUXO] dashboard para {self.perfil_logado}")
+    def _ir_para_dashboard(self, com_tutorial=False):
+        print(f"[FLUXO] dashboard para {self.perfil_logado} (tutorial={com_tutorial})")
         self._trocar_tela(TelaDashboard(
             self,
             perfil=self.perfil_logado,
             inventario=self.inventario,
             ao_sair=self._fazer_logout,
+            iniciar_tutorial=com_tutorial,
         ))
 
     def _fazer_logout(self):
-        print("[FLUXO] logout -> volta pro login")
+        print("[FLUXO] logout -> volta para login")
         self.perfil_logado = None
         self._mostrar_login()
 
