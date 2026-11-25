@@ -517,6 +517,9 @@ def modo_servidor() -> None:
         try:
             quantidade = len(inventario.ativos)
             logging.info("Batimento: aplicacao viva, %d ativos cadastrados.", quantidade)
+            # Atualiza arquivo lido pelo HEALTHCHECK para detectar deadlock
+            with open("/tmp/heartbeat.txt", "w") as arquivo:
+                arquivo.write(str(time.time()))
         except Exception as erro:
             logging.error("Erro no ciclo do servidor: %s", erro)
         time.sleep(INTERVALO_SEGUNDOS)
